@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Face Recognition — Live Scanner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<style>
+  :root{
+    --bg:#0a0d10;
+    --panel:#12171b;
+    --panel-2:#171e23;
+    --line:#232c32;
+    --text:#e7edf0;
+    --muted:#7d8b93;
+    --accent:#49ffb0;
+    --accent-dim:#1f5a45;
+    --warn:#ffb84c;
+    --danger:#ff5c5c;
+    --mono:'Space Mono', monospace;
+    --sans:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);}
+  body{min-height:100vh;padding:28px;}
+  .wrap{max-width:1180px;margin:0 auto;}
+  header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:10px;}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand-mark{width:14px;height:14px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);animation:pulse 2s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  h1{font-family:var(--mono);font-size:19px;letter-spacing:0.08em;margin:0;text-transform:uppercase;font-weight:700;}
+  .sub{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.05em;}
+  .status-pill{font-family:var(--mono);font-size:11px;letter-spacing:.06em;border:1px solid var(--line);padding:6px 12px;border-radius:20px;color:var(--muted);display:flex;align-items:center;gap:8px;}
+  .status-dot{width:7px;height:7px;border-radius:50%;background:var(--muted);}
+  .status-pill.ready .status-dot{background:var(--accent);box-shadow:0 0 8px var(--accent);}
+  .status-pill.error .status-dot{background:var(--danger);}
+
+  .grid{display:grid;grid-template-columns:1fr 340px;gap:18px;}
+  @media (max-width:880px){.grid{grid-template-columns:1fr;}}
+
+  .stage{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;position:relative;}
+  .stage-inner{position:relative;width:100%;aspect-ratio:4/3;background:#000;}
+  video, canvas{position:absolute;top:0;left:0;width:100%;height:100%;}
+  video{object-fit:cover;transform:scaleX(-1);}
+  canvas{transform:scaleX(-1);}
+  .scan-overlay{position:absolute;inset:0;pointer-events:none;background:
+    linear-gradient(var(--line) 1px, transparent 1px) 0 0/100% 40px,
+    linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0/40px 100%;
+    opacity:.12;}
+  .scan-line{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg, transparent, var(--accent), transparent);opacity:0;pointer-events:none;}
+  .scan-line.active{animation:scan 1.1s linear;}
+  @keyframes scan{0%{top:0%;opacity:1;}100%{top:100%;opacity:0;}}
+
+  .stage-foot{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--muted);}
+  .placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:var(--muted);font-family:var(--mono);font-size:12px;text-align:center;padding:20px;z-index:5;}
+  button{cursor:pointer;font-family:var(--sans);}
+  .btn{background:var(--accent);color:#04120c;border:none;border-radius:6px;padding:11px 16px;font-weight:600;font-size:13px;letter-spacing:.01em;}
+  .btn:hover{filter:brightness(1.08);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn.secondary{background:transparent;border:1px solid var(--line);color:var(--text);}
+  .btn.secondary:hover{border-color:var(--accent);color:var(--accent);}
+  .btn.small{padding:7px 10px;font-size:11px;border-radius:5px;}
+  .btn.danger-outline{background:transparent;border:1px solid var(--line);color:var(--danger);padding:5px 9px;font-size:11px;border-radius:5px;}
+
+  aside{display:flex;flex-direction:column;gap:14px;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;}
+  .panel h2{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0 0 12px 0;display:flex;align-items:center;justify-content:space-between;}
+  .panel h2 span.count{color:var(--accent);}
+
+  .tabs{display:flex;gap:6px;margin-bottom:12px;}
+  .tab-btn{flex:1;background:var(--panel-2);border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:8px;font-family:var(--mono);font-size:11px;letter-spacing:.03em;}
+  .tab-btn.active{color:var(--accent);border-color:var(--accent-dim);background:rgba(73,255,176,0.08);}
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;}
+
+  .field label{display:block;font-size:11px;color:var(--muted);margin-bottom:6px;font-family:var(--mono);letter-spacing:.03em;}
+  .field input[type=text]{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:10px 11px;color:var(--text);font-family:var(--sans);font-size:13px;}
+  .field input[type=text]:focus{outline:none;border-color:var(--accent);}
+  .field{margin-bottom:10px;}
+  .row{display:flex;gap:8px;}
+  .row .btn, .row .btn.secondary{flex:1;}
+  .hint{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;}
+
+  .dropzone{border:1.5px dashed var(--line);border-radius:8px;padding:16px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);cursor:pointer;margin-bottom:10px;}
+  .dropzone.drag{border-color:var(--accent);color:var(--accent);}
+  .photo-preview{position:relative;margin-bottom:10px;display:none;}
+  .photo-preview img{width:100%;border-radius:8px;display:block;}
+  .photo-preview canvas{position:absolute;top:0;left:0;width:100%;height:100%;}
+
+  .people-list{display:flex;flex-direction:column;gap:8px;max-height:190px;overflow-y:auto;}
+  .person{display:flex;align-items:center;justify-content:space-between;background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:8px 10px;}
+  .person-name{font-size:13px;font-weight:500;}
+  .person-meta{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;}
+  .empty-note{font-size:12px;color:var(--muted);padding:10px 0;font-family:var(--mono);}
+
+  .pending-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .pending-card{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px;position:relative;}
+  .pending-card img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:6px;display:block;margin-bottom:6px;background:#000;}
+  .pending-card .dismiss{position:absolute;top:4px;right:4px;width:18px;height:18px;border-radius:50%;background:rgba(10,13,16,0.8);border:1px solid var(--line);color:var(--muted);font-size:11px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0;}
+  .pending-card input{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:6px 7px;color:var(--text);font-size:12px;margin-bottom:5px;}
+  .pending-card input:focus{outline:none;border-color:var(--accent);}
+  .pending-card .add-btn{width:100%;background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent-dim);border-radius:5px;padding:6px;font-size:11px;font-family:var(--mono);}
+  .pending-card .add-btn:hover{background:var(--accent);color:#04120c;}
+
+  .log{display:flex;flex-direction:column-reverse;gap:6px;max-height:220px;overflow-y:auto;font-family:var(--mono);font-size:11px;}
+  .log-item{display:flex;justify-content:space-between;gap:8px;padding:7px 9px;border-radius:5px;background:var(--panel-2);border-left:2px solid var(--line);}
+  .log-item.match{border-left-color:var(--accent);}
+  .log-item.unknown{border-left-color:var(--warn);color:var(--warn);}
+  .log-time{color:var(--muted);white-space:nowrap;}
+
+  ::-webkit-scrollbar{width:6px;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div>
+        <h1>Face Recognition Scanner</h1>
+        <div class="sub">local, in-browser · nothing leaves your device</div>
+      </div>
+    </div>
+    <div class="status-pill" id="statusPill"><div class="status-dot"></div><span id="statusText">loading models…</span></div>
+  </header>
+
+  <div class="grid">
+    <div>
+      <div class="stage">
+        <div class="stage-inner" id="stageInner">
+          <video id="video" autoplay muted playsinline></video>
+          <canvas id="overlay"></canvas>
+          <div class="scan-overlay"></div>
+          <div class="scan-line" id="scanLine"></div>
+          <div class="placeholder" id="placeholder">
+            <div>◎</div>
+            <div id="placeholderText">Preparing camera and detection models…</div>
+          </div>
+        </div>
+        <div class="stage-foot">
+          <span id="fpsInfo">detector: idle</span>
+          <span id="faceCountInfo">0 faces in frame</span>
+        </div>
+      </div>
+    </div>
+
+    <aside>
+      <div class="panel" id="pendingPanel">
+        <h2>New Faces Detected <span class="count" id="pendingCount">0</span></h2>
+        <div class="pending-grid" id="pendingGrid"></div>
+        <div class="empty-note" id="pendingEmpty">No unrecognized faces right now — they'll show up here automatically, like Google Photos suggesting "who's this?"</div>
+        <div class="hint">A card appears whenever the scanner sees a face it doesn't know. Name it and hit Add to enroll instantly.</div>
+      </div>
+
+      <div class="panel">
+        <h2>Register a Face</h2>
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="cam">From Camera</button>
+          <button class="tab-btn" data-tab="photo">From Photo</button>
+        </div>
+
+        <div class="tab-panel active" id="tab-cam">
+          <div class="field">
+            <label>Name</label>
+            <input type="text" id="nameInput" placeholder="e.g. Alex" maxlength="30">
+          </div>
+          <div class="row">
+            <button class="btn" id="captureBtn" disabled>Capture &amp; Save</button>
+          </div>
+          <div class="hint">Look at the camera and click capture. Add 2–3 captures per person from slightly different angles for more reliable recognition — the more samples, the better it matches, similar to how Google Photos improves as you confirm more shots of someone.</div>
+        </div>
+
+        <div class="tab-panel" id="tab-photo">
+          <div class="dropzone" id="dropzone">drop an image here, or click to choose a file</div>
+          <input type="file" id="fileInput" accept="image/*" style="display:none">
+          <div class="photo-preview" id="photoPreview">
+            <img id="photoImg">
+            <canvas id="photoCanvas"></canvas>
+          </div>
+          <div class="field">
+            <label>Name</label>
+            <input type="text" id="photoNameInput" placeholder="e.g. Alex" maxlength="30">
+          </div>
+          <div class="row">
+            <button class="btn" id="photoSaveBtn" disabled>Save Face from Photo</button>
+          </div>
+          <div class="hint" id="photoHint">Upload a clear, front-facing photo. The largest detected face in the image will be enrolled.</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Enrolled People <span class="count" id="peopleCount">0</span></h2>
+        <div class="people-list" id="peopleList">
+          <div class="empty-note">No one enrolled yet.</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Recognition Log</h2>
+        <div class="log" id="logList"></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+const MODEL_URL = 'https://cdn.jsdelivr.net/gh/vladmandic/face-api/model';
+const video = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+const ctx = overlay.getContext('2d');
+const statusPill = document.getElementById('statusPill');
+const statusText = document.getElementById('statusText');
+const placeholder = document.getElementById('placeholder');
+const placeholderText = document.getElementById('placeholderText');
+const captureBtn = document.getElementById('captureBtn');
+const nameInput = document.getElementById('nameInput');
+const peopleList = document.getElementById('peopleList');
+const peopleCount = document.getElementById('peopleCount');
+const logList = document.getElementById('logList');
+const faceCountInfo = document.getElementById('faceCountInfo');
+const fpsInfo = document.getElementById('fpsInfo');
+const scanLine = document.getElementById('scanLine');
+const pendingGrid = document.getElementById('pendingGrid');
+const pendingCount = document.getElementById('pendingCount');
+const pendingEmpty = document.getElementById('pendingEmpty');
+
+// name -> array of Float32Array descriptors
+const registry = {};
+let faceMatcher = null;
+let modelsReady = false;
+let cameraReady = false;
+let lastDetections = [];
+const recentlyLogged = {}; // name/unknown-track -> timestamp, throttle log spam
+
+// ---- Pending "new face" suggestions (Google-Photos-style quick add) ----
+// each: { id, descriptor, thumbDataUrl }
+let pendingFaces = [];
+const MAX_PENDING = 6;
+const NOVELTY_THRESHOLD = 0.52; // must be this "far" from every existing pending/registered face to count as new
+
+function distToRegistry(desc){
+  let min = Infinity;
+  Object.values(registry).forEach(list => {
+    list.forEach(d => { min = Math.min(min, faceapi.euclideanDistance(desc, d)); });
+  });
+  pendingFaces.forEach(p => { min = Math.min(min, faceapi.euclideanDistance(desc, p.descriptor)); });
+  return min;
+}
+
+function makeThumb(sourceEl, box){
+  const size = 140;
+  const c = document.createElement('canvas');
+  c.width = size; c.height = size;
+  const cx = c.getContext('2d');
+  // mirror horizontally so the thumbnail matches what the user sees in the self-view
+  cx.translate(size, 0);
+  cx.scale(-1, 1);
+  cx.drawImage(sourceEl, box.x, box.y, box.width, box.height, 0, 0, size, size);
+  return c.toDataURL('image/jpeg', 0.85);
+}
+
+function addPendingFace(descriptor, box){
+  if(pendingFaces.length >= MAX_PENDING) pendingFaces.shift();
+  const id = 'p' + Date.now() + Math.random().toString(36).slice(2,7);
+  const thumb = makeThumb(video, box);
+  pendingFaces.push({ id, descriptor, thumb });
+  renderPending();
+}
+
+function renderPending(){
+  pendingCount.textContent = pendingFaces.length;
+  pendingEmpty.style.display = pendingFaces.length ? 'none' : 'block';
+  pendingGrid.innerHTML = '';
+  pendingFaces.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'pending-card';
+    card.innerHTML = `
+      <button class="dismiss" title="Dismiss">×</button>
+      <img src="${p.thumb}">
+      <input type="text" placeholder="Who is this?" maxlength="30">
+      <button class="add-btn">Add Entry</button>
+    `;
+    card.querySelector('.dismiss').onclick = () => {
+      pendingFaces = pendingFaces.filter(x => x.id !== p.id);
+      renderPending();
+    };
+    const input = card.querySelector('input');
+    const addBtn = card.querySelector('.add-btn');
+    const commit = () => {
+      const name = input.value.trim();
+      if(!name){ input.focus(); return; }
+      if(!registry[name]) registry[name] = [];
+      registry[name].push(p.descriptor);
+      rebuildMatcher();
+      renderPeople();
+      pendingFaces = pendingFaces.filter(x => x.id !== p.id);
+      renderPending();
+      addLog(name + ' enrolled', true, 100);
+    };
+    addBtn.onclick = commit;
+    input.addEventListener('keydown', e => { if(e.key === 'Enter') commit(); });
+    pendingGrid.appendChild(card);
+  });
+}
+
+// ---- status / logging ----
+function setStatus(state, text){
+  statusPill.classList.remove('ready','error');
+  if(state) statusPill.classList.add(state);
+  statusText.textContent = text;
+}
+
+function fmtTime(){
+  const d = new Date();
+  return d.toLocaleTimeString([], {hour12:false});
+}
+
+function addLog(name, isMatch, pct){
+  const item = document.createElement('div');
+  item.className = 'log-item ' + (isMatch ? 'match' : 'unknown');
+  const label = document.createElement('span');
+  label.textContent = isMatch ? `${name} · ${pct}%` : 'Unknown face';
+  const time = document.createElement('span');
+  time.className = 'log-time';
+  time.textContent = fmtTime();
+  item.appendChild(label);
+  item.appendChild(time);
+  logList.appendChild(item);
+  while(logList.children.length > 40){ logList.removeChild(logList.firstChild); }
+  logList.scrollTop = logList.scrollHeight;
+}
+
+function renderPeople(){
+  const names = Object.keys(registry);
+  peopleCount.textContent = names.length;
+  if(names.length === 0){
+    peopleList.innerHTML = '<div class="empty-note">No one enrolled yet.</div>';
+    return;
+  }
+  peopleList.innerHTML = '';
+  names.forEach(name => {
+    const row = document.createElement('div');
+    row.className = 'person';
+    const left = document.createElement('div');
+    left.innerHTML = `<div class="person-name">${name}</div><div class="person-meta">${registry[name].length} sample${registry[name].length>1?'s':''}</div>`;
+    const del = document.createElement('button');
+    del.className = 'danger-outline';
+    del.textContent = 'Remove';
+    del.onclick = () => { delete registry[name]; rebuildMatcher(); renderPeople(); };
+    row.appendChild(left);
+    row.appendChild(del);
+    peopleList.appendChild(row);
+  });
+}
+
+function rebuildMatcher(){
+  const names = Object.keys(registry);
+  if(names.length === 0){ faceMatcher = null; return; }
+  const labeled = names.map(name => new faceapi.LabeledFaceDescriptors(name, registry[name]));
+  faceMatcher = new faceapi.FaceMatcher(labeled, 0.5);
+}
+
+async function loadModels(){
+  setStatus(null, 'loading models…');
+  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+  modelsReady = true;
+  checkReady();
+}
+
+async function startCamera(){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width:640, height:480 }, audio:false });
+    video.srcObject = stream;
+    await new Promise(res => { video.onloadedmetadata = () => res(); });
+    cameraReady = true;
+    checkReady();
+  }catch(err){
+    setStatus('error', 'camera access denied');
+    placeholderText.textContent = 'Camera access is required. Please allow camera permission and reload.';
+  }
+}
+
+function checkReady(){
+  if(modelsReady && cameraReady){
+    setStatus('ready', 'scanning');
+    placeholder.style.display = 'none';
+    captureBtn.disabled = false;
+    resizeOverlay();
+    detectLoop();
+  } else if(modelsReady && !cameraReady){
+    placeholderText.textContent = 'Waiting for camera permission…';
+  }
+}
+
+function resizeOverlay(){
+  const rect = video.getBoundingClientRect();
+  overlay.width = video.videoWidth || rect.width;
+  overlay.height = video.videoHeight || rect.height;
+}
+window.addEventListener('resize', resizeOverlay);
+
+function drawBracketBox(x, y, w, h, color){
+  const s = Math.min(w,h) * 0.22;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(x, y+s); ctx.lineTo(x, y); ctx.lineTo(x+s, y);
+  ctx.moveTo(x+w-s, y); ctx.lineTo(x+w, y); ctx.lineTo(x+w, y+s);
+  ctx.moveTo(x+w, y+h-s); ctx.lineTo(x+w, y+h); ctx.lineTo(x+w-s, y+h);
+  ctx.moveTo(x+s, y+h); ctx.lineTo(x, y+h); ctx.lineTo(x, y+h-s);
+  ctx.stroke();
+}
+
+// ---- simple frame-to-frame tracking + label smoothing (reduces flicker, feels steadier / more "Google-like") ----
+let tracks = []; // { id, cx, cy, w, buffer:[label,...], lastSeen, cooldownUntil }
+let trackSeq = 0;
+const BUFFER_LEN = 6;
+const MATCH_DIST_FACTOR = 0.75; // fraction of box width used as center-matching radius
+
+function modeLabel(buffer){
+  const counts = {};
+  buffer.forEach(l => counts[l] = (counts[l]||0) + 1);
+  let best = buffer[buffer.length-1], bestCount = 0;
+  Object.entries(counts).forEach(([l,c]) => { if(c > bestCount){ best = l; bestCount = c; } });
+  return best;
+}
+
+async function detectLoop(){
+  const t0 = performance.now();
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });
+  const detections = await faceapi
+    .detectAllFaces(video, options)
+    .withFaceLandmarks()
+    .withFaceDescriptors();
+
+  lastDetections = detections;
+  ctx.clearRect(0,0,overlay.width, overlay.height);
+  faceCountInfo.textContent = `${detections.length} face${detections.length===1?'':'s'} in frame`;
+
+  const usedTrackIds = new Set();
+  const nextTracks = [];
+
+  detections.forEach(det => {
+    const box = det.detection.box;
+    const cx = box.x + box.width/2, cy = box.y + box.height/2;
+
+    // raw match this frame
+    let rawLabel = 'unknown';
+    let pct = 0;
+    if(faceMatcher){
+      const best = faceMatcher.findBestMatch(det.descriptor);
+      if(best.label !== 'unknown'){ rawLabel = best.label; pct = Math.round((1-best.distance)*100); }
+    }
+
+    // find nearest existing track by center distance
+    let track = null, bestDist = Infinity;
+    tracks.forEach(t => {
+      if(usedTrackIds.has(t.id)) return;
+      const d = Math.hypot(t.cx-cx, t.cy-cy);
+      if(d < box.width * MATCH_DIST_FACTOR && d < bestDist){ bestDist = d; track = t; }
+    });
+    if(!track){ track = { id: trackSeq++, buffer: [] }; }
+    usedTrackIds.add(track.id);
+    track.cx = cx; track.cy = cy; track.w = box.width;
+    track.buffer.push(rawLabel);
+    if(track.buffer.length > BUFFER_LEN) track.buffer.shift();
+
+    const stableLabel = modeLabel(track.buffer);
+    const isMatch = stableLabel !== 'unknown';
+    const color = getComputedStyle(document.documentElement).getPropertyValue(isMatch ? '--accent' : '--warn').trim();
+
+    drawBracketBox(box.x, box.y, box.width, box.height, color);
+    ctx.save();
+    ctx.translate(box.x + box.width, box.y - 8);
+    ctx.scale(-1,1);
+    ctx.font = "12px 'Space Mono', monospace";
+    const text = isMatch ? `${stableLabel} ${pct}%` : 'UNKNOWN';
+    const textW = ctx.measureText(text).width;
+    ctx.fillStyle = 'rgba(10,13,16,0.85)';
+    ctx.fillRect(-textW-10, -16, textW+10, 20);
+    ctx.fillStyle = color;
+    ctx.fillText(text, -textW-5, -2);
+    ctx.restore();
+
+    // log only once the track has "settled" on a stable read (avoids spam from single-frame noise)
+    const settled = track.buffer.length >= 3;
+    const logKey = isMatch ? stableLabel : 'unknown-' + track.id;
+    const now = Date.now();
+    if(settled && (!recentlyLogged[logKey] || now - recentlyLogged[logKey] > 4000)){
+      recentlyLogged[logKey] = now;
+      addLog(stableLabel, isMatch, pct);
+    }
+
+    // offer a "new entry" suggestion once a track has consistently read unknown
+    if(settled && !isMatch && track.buffer.every(l => l === 'unknown') && !track.suggested){
+      if(distToRegistry(det.descriptor) > NOVELTY_THRESHOLD){
+        addPendingFace(det.descriptor, box);
+      }
+      track.suggested = true; // avoid re-suggesting the same track every frame
+    }
+    if(isMatch) track.suggested = false;
+
+    nextTracks.push(track);
+  });
+
+  tracks = nextTracks;
+
+  const dt = performance.now() - t0;
+  fpsInfo.textContent = `detector: ${dt.toFixed(0)}ms/frame`;
+
+  requestAnimationFrame(detectLoop);
+}
+
+captureBtn.addEventListener('click', () => {
+  const name = nameInput.value.trim();
+  if(!name){ nameInput.focus(); return; }
+  if(!lastDetections || lastDetections.length === 0){
+    addLog('No face detected to capture', false, 0);
+    return;
+  }
+  const best = lastDetections.reduce((a,b) => (a.detection.box.area > b.detection.box.area ? a : b));
+  if(!registry[name]) registry[name] = [];
+  registry[name].push(best.descriptor);
+  rebuildMatcher();
+  renderPeople();
+  scanLine.classList.remove('active');
+  void scanLine.offsetWidth;
+  scanLine.classList.add('active');
+  addLog(name + ' enrolled', true, 100);
+});
+
+// ---- tabs ----
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ---- photo upload enrollment ----
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const photoPreview = document.getElementById('photoPreview');
+const photoImg = document.getElementById('photoImg');
+const photoCanvas = document.getElementById('photoCanvas');
+const photoNameInput = document.getElementById('photoNameInput');
+const photoSaveBtn = document.getElementById('photoSaveBtn');
+const photoHint = document.getElementById('photoHint');
+let photoDescriptor = null;
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  if(e.dataTransfer.files[0]) handlePhotoFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if(fileInput.files[0]) handlePhotoFile(fileInput.files[0]); });
+
+function handlePhotoFile(file){
+  if(!file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    photoImg.src = reader.result;
+    photoPreview.style.display = 'block';
+    photoDescriptor = null;
+    photoSaveBtn.disabled = true;
+    photoHint.textContent = 'Analyzing photo…';
+    await new Promise(res => { photoImg.onload = res; });
+    const rect = photoImg.getBoundingClientRect();
+    photoCanvas.width = photoImg.naturalWidth;
+    photoCanvas.height = photoImg.naturalHeight;
+    const pctx = photoCanvas.getContext('2d');
+    pctx.clearRect(0,0,photoCanvas.width, photoCanvas.height);
+
+    if(!modelsReady){ photoHint.textContent = 'Models still loading — try again in a moment.'; return; }
+    const dets = await faceapi.detectAllFaces(photoImg, new faceapi.TinyFaceDetectorOptions({inputSize:416, scoreThreshold:0.5}))
+      .withFaceLandmarks().withFaceDescriptors();
+    if(dets.length === 0){
+      photoHint.textContent = 'No face found in this photo — try a clearer, front-facing image.';
+      return;
+    }
+    const best = dets.reduce((a,b) => (a.detection.box.area > b.detection.box.area ? a : b));
+    photoDescriptor = best.descriptor;
+    pctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    pctx.lineWidth = Math.max(3, photoCanvas.width*0.006);
+    const b = best.detection.box;
+    pctx.strokeRect(b.x, b.y, b.width, b.height);
+    photoSaveBtn.disabled = false;
+    photoHint.textContent = dets.length > 1
+      ? `Found ${dets.length} faces — the largest one (outlined) will be saved.`
+      : 'Face detected. Enter a name and save.';
+  };
+  reader.readAsDataURL(file);
+}
+
+photoSaveBtn.addEventListener('click', () => {
+  const name = photoNameInput.value.trim();
+  if(!name){ photoNameInput.focus(); return; }
+  if(!photoDescriptor) return;
+  if(!registry[name]) registry[name] = [];
+  registry[name].push(photoDescriptor);
+  rebuildMatcher();
+  renderPeople();
+  addLog(name + ' enrolled (from photo)', true, 100);
+  photoDescriptor = null;
+  photoSaveBtn.disabled = true;
+  photoNameInput.value = '';
+});
+
+loadModels();
+startCamera();
+</script>
+</body>
+</html>
